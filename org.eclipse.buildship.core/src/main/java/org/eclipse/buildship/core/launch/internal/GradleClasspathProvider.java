@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
@@ -56,7 +57,31 @@ public final class GradleClasspathProvider extends StandardClasspathProvider imp
 
     @Override
     public IRuntimeClasspathEntry[] computeUnresolvedClasspath(ILaunchConfiguration configuration) throws CoreException {
-        return super.computeUnresolvedClasspath(configuration);
+        // If Java 9 is being used in the execution the unresolved already contains the binary
+        // dependencies
+        return filterUnusedDependencies(configuration, super.computeUnresolvedClasspath(configuration));
+    }
+
+    private IRuntimeClasspathEntry[] filterUnusedDependencies(ILaunchConfiguration configuration, IRuntimeClasspathEntry[] entriesToFilter) throws CoreException {
+        //
+        IJavaProject project = JavaRuntime.getJavaProject(configuration);
+        IClasspathEntry[] classpath = project.getResolvedClasspath(true);
+        LaunchConfigurationScope configurationScopes = LaunchConfigurationScope.from(configuration);
+        Set<IPath> excludedPaths = Sets.newHashSet();
+        for (IClasspathEntry entry : classpath) {
+            if (!configurationScopes.isEntryIncluded(entry)) {
+                excludedPaths.add(entry.getPath());
+            }
+        }
+
+        List<IRuntimeClasspathEntry> result = new ArrayList<IRuntimeClasspathEntry>(entriesToFilter.length);
+        for (IRuntimeClasspathEntry  entry : entriesToFilter) {
+            if (!excludedPaths.contains(entry.getPath())) {
+                result.add(entry);
+            }
+        }
+
+        return result.toArray(new IRuntimeClasspathEntry[0]);
     }
 
     @Override
